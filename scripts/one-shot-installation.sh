@@ -14,7 +14,6 @@
 # CE QUI EST INSTALLÉ
 #   Docker, Node.js 20
 #   containerd, kubeadm v1.30, kubelet, kubectl, Flannel, Helm
-#   Alias : k=kubectl dans ~/.bashrc
 # =============================================================================
 
 set -euo pipefail
@@ -252,29 +251,14 @@ KUBEADMEOF
     success "Cluster initialisé — API server opérationnel."
 fi
 
-# ─── 9. KUBECONFIG + alias permanents ───────────────────────────────────────
-section "9 · Configuration permanente kubectl + alias"
+# ─── 9. KUBECONFIG permanent ────────────────────────────────────────────────
+section "9 · Configuration permanente kubectl"
 
 grep -q 'KUBECONFIG' "$HOME/.bashrc" 2>/dev/null || \
     echo 'export KUBECONFIG="$HOME/.kube/config"' >> "$HOME/.bashrc"
 
-if ! grep -q "alias k=kubectl" "$HOME/.bashrc" 2>/dev/null; then
-    cat >> "$HOME/.bashrc" << 'BASHRC_EOF'
-
-# kubectl alias
-alias k=kubectl
-# Complétion kubectl
-if command -v kubectl &>/dev/null; then
-    source <(kubectl completion bash) 2>/dev/null
-    complete -o default -F __start_kubectl k
-fi
-BASHRC_EOF
-fi
-
 export KUBECONFIG="$HOME/.kube/config"
-alias k=kubectl 2>/dev/null || true
 
-success "Alias k=kubectl configuré dans ~/.bashrc"
 success "KUBECONFIG configuré de façon permanente"
 
 # ─── 10. Suppression du taint control-plane ─────────────────────────────────
@@ -373,7 +357,6 @@ chk "containerd"         "systemctl is-active containerd"
 chk "kubelet"            "systemctl is-active kubelet"
 chk "kubectl"            "kubectl get nodes"
 chk "kubeconfig"         "test -f $HOME/.kube/config"
-chk "alias k=kubectl"    "grep 'alias k=kubectl' $HOME/.bashrc"
 chk "Flannel Running"    "kubectl get pods -n kube-flannel -l app=flannel --field-selector=status.phase=Running | grep flannel"
 chk "Helm"               "helm version"
 
@@ -405,10 +388,5 @@ echo ""
 
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║   Installation terminée avec succès !                ║"
-echo "║                                                      ║"
-echo "║   Activer les alias dans cette session :             ║"
-echo "║     source ~/.bashrc                                 ║"
-echo "║                                                      ║"
-echo "║   Raccourci disponible : k = kubectl                 ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
