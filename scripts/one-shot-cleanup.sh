@@ -213,16 +213,11 @@ success "Fichiers système nettoyés."
 # ─── 8. Nettoyage de ~/.bashrc ───────────────────────────────────────────────
 section "8 · Nettoyage de ~/.bashrc"
 
-info "Suppression des alias et exports ajoutés par l'installation..."
+info "Suppression des exports ajoutés par l'installation..."
 
 # Supprimer les blocs ajoutés par le script d'installation
-sed -i '/# kubectl alias/d'                          "$HOME/.bashrc" 2>/dev/null || true
-sed -i '/alias k=kubectl/d'                          "$HOME/.bashrc" 2>/dev/null || true
-sed -i '/# Complétion kubectl/d'                     "$HOME/.bashrc" 2>/dev/null || true
-sed -i '/source <(kubectl completion bash)/d'        "$HOME/.bashrc" 2>/dev/null || true
-sed -i '/complete -o default -F __start_kubectl k/d' "$HOME/.bashrc" 2>/dev/null || true
-sed -i '/export KUBECONFIG/d'                        "$HOME/.bashrc" 2>/dev/null || true
-sed -i '/\.local\/bin/d'                             "$HOME/.bashrc" 2>/dev/null || true
+sed -i '/export KUBECONFIG/d'  "$HOME/.bashrc" 2>/dev/null || true
+sed -i '/\.local\/bin/d'      "$HOME/.bashrc" 2>/dev/null || true
 
 success "~/.bashrc nettoyé."
 
