@@ -72,18 +72,21 @@ success "Système mis à jour."
 # ─── 2. Docker ───────────────────────────────────────────────────────────────
 section "2 · Docker"
 
-if command -v docker &>/dev/null && sudo docker version &>/dev/null 2>&1; then
-    success "Docker déjà installé : $(docker --version)"
-else
-    sudo apt-get install -y -qq docker.io docker-compose
-    sudo systemctl enable docker
-    sudo systemctl start docker
-    sudo usermod -aG docker "$USER" || true
-    success "Docker installé : $(docker --version)"
-fi
+sudo apt-get install -y -qq docker.io docker-compose
+sudo systemctl enable docker
+sudo systemctl start docker
 
-# Accès immédiat au socket sans reconnexion
-sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+# Attendre que le daemon Docker soit prêt (max 30s)
+info "Attente du daemon Docker..."
+for i in $(seq 1 15); do
+    sudo docker version &>/dev/null 2>&1 && break
+    sleep 2
+    [ $i -eq 15 ] && warn "Docker daemon lent à démarrer — poursuite quand même."
+done
+
+# Accès immédiat au socket sans reconnexion ni newgrp
+sudo chmod 666 /var/run/docker.sock
+success "Docker installé et opérationnel : $(docker --version)"
 
 # ─── 3. Node.js 20 LTS ───────────────────────────────────────────────────────
 section "3 · Node.js 20 LTS"
@@ -388,5 +391,8 @@ echo ""
 
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║   Installation terminée avec succès !                ║"
+echo "║                                                      ║"
+echo "║   Recharger le shell dans cette session :            ║"
+echo "║     source ~/.bashrc                                 ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
