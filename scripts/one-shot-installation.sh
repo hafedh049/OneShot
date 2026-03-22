@@ -12,8 +12,7 @@
 #   ./one-shot-installation.sh
 #
 # CE QUI EST INSTALLÉ
-#   Docker, Trivy, Hadolint (binaire), Node.js 20, Bandit, Semgrep, Safety
-#   SonarQube (port 9000), OWASP Juice Shop (port 3001)
+#   Docker, Node.js 20
 #   containerd, kubeadm v1.30, kubelet, kubectl, Flannel, Helm
 #   Alias : k=kubectl dans ~/.bashrc
 # =============================================================================
@@ -87,50 +86,8 @@ fi
 # Accès immédiat au socket sans reconnexion
 sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
 
-# ─── 3. Trivy ────────────────────────────────────────────────────────────────
-section "3 · Trivy (scanner de vulnérabilités)"
-
-if command -v trivy &>/dev/null; then
-    success "Trivy déjà installé : $(trivy --version | head -1)"
-else
-    wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
-        | gpg --dearmor \
-        | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-    echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] \
-https://aquasecurity.github.io/trivy-repo/deb generic main" \
-        | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
-    sudo apt-get update -qq
-    sudo apt-get install -y -qq trivy
-    success "Trivy installé : $(trivy --version | head -1)"
-fi
-
-# ─── 4. Hadolint — binaire direct (pas de Docker socket) ─────────────────────
-section "4 · Hadolint (binaire)"
-
-# Supprimer l'ancien wrapper Docker si présent
-if [ -f /usr/local/bin/hadolint ]; then
-    if file /usr/local/bin/hadolint | grep -qE "shell script|text|ASCII"; then
-        warn "Ancien wrapper Docker détecté — remplacement par le binaire..."
-        sudo rm -f /usr/local/bin/hadolint
-    fi
-fi
-
-if command -v hadolint &>/dev/null && \
-   ! file /usr/local/bin/hadolint 2>/dev/null | grep -qE "shell script|text|ASCII"; then
-    success "Hadolint (binaire) déjà installé : $(hadolint --version 2>/dev/null)"
-else
-    ARCH=$(uname -m)
-    HADOLINT_ARCH="x86_64"
-    [[ "$ARCH" == "aarch64" ]] && HADOLINT_ARCH="arm64"
-    sudo curl -fsSL \
-        "https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-${HADOLINT_ARCH}" \
-        -o /usr/local/bin/hadolint
-    sudo chmod +x /usr/local/bin/hadolint
-    success "Hadolint installé : $(hadolint --version)"
-fi
-
-# ─── 5. Node.js 20 LTS ───────────────────────────────────────────────────────
-section "5 · Node.js 20 LTS"
+# ─── 3. Node.js 20 LTS ───────────────────────────────────────────────────────
+section "3 · Node.js 20 LTS"
 
 if command -v node &>/dev/null; then
     success "Node.js déjà installé : $(node --version)"
@@ -140,62 +97,16 @@ else
     success "Node.js installé : $(node --version)"
 fi
 
-# ─── 6. Outils SAST/SCA ──────────────────────────────────────────────────────
-section "6 · Outils SAST/SCA (Bandit, Semgrep, Safety)"
-
-# Installer en mode système (compatible Ubuntu 22.04 et 24.04)
-pip3 install --quiet --break-system-packages bandit semgrep safety 2>/dev/null || \
-pip3 install --quiet bandit semgrep safety
-
-# S'assurer que ~/.local/bin est dans le PATH
-export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
-grep -q '\.local/bin' "$HOME/.bashrc" 2>/dev/null || \
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-
-success "Bandit   : $(bandit --version 2>/dev/null | head -1 || echo installé)"
-success "Semgrep  : $(semgrep --version 2>/dev/null | head -1 || echo installé)"
-success "Safety   : $(safety --version 2>/dev/null | head -1 || echo installé)"
-
-# ─── 7. SonarQube ────────────────────────────────────────────────────────────
-section "7 · SonarQube (port 9000)"
-
-if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^sonarqube$"; then
-    sudo docker start sonarqube 2>/dev/null || true
-    success "SonarQube déjà déployé."
-else
-    sudo sysctl -w vm.max_map_count=524288 > /dev/null 2>&1 || true
-    sudo sysctl -w fs.file-max=131072 > /dev/null 2>&1 || true
-    grep -q "vm.max_map_count" /etc/sysctl.conf 2>/dev/null || \
-        echo "vm.max_map_count=524288" | sudo tee -a /etc/sysctl.conf > /dev/null
-    sudo docker run -d --name sonarqube --restart unless-stopped \
-        -p 9000:9000 \
-        -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
-        sonarqube:community
-    success "SonarQube démarré sur le port 9000."
-fi
-
-# ─── 8. OWASP Juice Shop ─────────────────────────────────────────────────────
-section "8 · OWASP Juice Shop (port 3001)"
-
-if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^juiceshop$"; then
-    sudo docker start juiceshop 2>/dev/null || true
-    success "Juice Shop déjà déployé."
-else
-    sudo docker run -d --name juiceshop --restart unless-stopped \
-        -p 3001:3000 bkimminich/juice-shop
-    success "Juice Shop démarré sur le port 3001."
-fi
-
-# ─── 9. Swap désactivé ───────────────────────────────────────────────────────
-section "9 · Désactivation du swap (Kubernetes)"
+# ─── 4. Swap désactivé ───────────────────────────────────────────────────────
+section "4 · Désactivation du swap (Kubernetes)"
 
 sudo swapoff -a
 sudo sed -i '/\bswap\b/s/^/#/' /etc/fstab
 sudo systemctl mask swap.target 2>/dev/null || true
 success "Swap désactivé."
 
-# ─── 10. Modules kernel ──────────────────────────────────────────────────────
-section "10 · Modules kernel et sysctl"
+# ─── 5. Modules kernel ──────────────────────────────────────────────────────
+section "5 · Modules kernel et sysctl"
 
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf > /dev/null
 overlay
@@ -212,8 +123,8 @@ EOF
 sudo sysctl --system -q
 success "Modules kernel et sysctl configurés."
 
-# ─── 11. containerd ──────────────────────────────────────────────────────────
-section "11 · containerd (container runtime)"
+# ─── 6. containerd ──────────────────────────────────────────────────────────
+section "6 · containerd (container runtime)"
 
 if ! systemctl is-active containerd &>/dev/null; then
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
@@ -237,8 +148,8 @@ for i in $(seq 1 10); do
 done
 success "containerd installé et configuré."
 
-# ─── 12. kubeadm / kubelet / kubectl v1.30 ───────────────────────────────────
-section "12 · kubeadm / kubelet / kubectl v1.30"
+# ─── 7. kubeadm / kubelet / kubectl v1.30 ───────────────────────────────────
+section "7 · kubeadm / kubelet / kubectl v1.30"
 
 if ! command -v kubectl &>/dev/null; then
     sudo mkdir -p /etc/apt/keyrings
@@ -270,17 +181,17 @@ echo "KUBELET_EXTRA_ARGS=--node-ip=${LOCAL_IP}" \
 sudo systemctl enable kubelet
 success "kubeadm, kubelet, kubectl v1.30 installés."
 
-# ─── 13. Initialisation du cluster single-node ───────────────────────────────
-section "13 · Initialisation du cluster Kubernetes"
+# ─── 8. Initialisation du cluster single-node ───────────────────────────────
+section "8 · Initialisation du cluster Kubernetes"
 
 if [ -f "$HOME/.kube/config" ] && kubectl cluster-info &>/dev/null 2>&1; then
     success "Cluster déjà initialisé et opérationnel."
 else
     EC2_TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
-    -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null || true)
-LOCAL_IP=$(curl -sf -H "X-aws-ec2-metadata-token: ${EC2_TOKEN}" \
-    http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null \
-    || hostname -I | awk '{print $1}')
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null || true)
+    LOCAL_IP=$(curl -sf -H "X-aws-ec2-metadata-token: ${EC2_TOKEN}" \
+        http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null \
+        || hostname -I | awk '{print $1}')
     info "IP locale : ${LOCAL_IP} | Interface : ${PRIMARY_IFACE}"
 
     # Reset si installation partielle
@@ -293,7 +204,6 @@ LOCAL_IP=$(curl -sf -H "X-aws-ec2-metadata-token: ${EC2_TOKEN}" \
     fi
 
     # ── Config kubeadm ──
-    # advertiseAddress UNIQUEMENT dans InitConfiguration (pas ClusterConfiguration)
     cat > /tmp/kubeadm-config.yaml << KUBEADMEOF
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
@@ -342,16 +252,12 @@ KUBEADMEOF
     success "Cluster initialisé — API server opérationnel."
 fi
 
-# ─── 14. KUBECONFIG + alias permanents ───────────────────────────────────────
-section "14 · Configuration permanente kubectl + alias"
+# ─── 9. KUBECONFIG + alias permanents ───────────────────────────────────────
+section "9 · Configuration permanente kubectl + alias"
 
-# KUBECONFIG dans .bashrc
 grep -q 'KUBECONFIG' "$HOME/.bashrc" 2>/dev/null || \
     echo 'export KUBECONFIG="$HOME/.kube/config"' >> "$HOME/.bashrc"
 
-# Alias k=kubectl avec complétion bash
-# Note : complete -F __start_kubectl n'est disponible qu'après
-# avoir sourcé la complétion kubectl — on le fait proprement
 if ! grep -q "alias k=kubectl" "$HOME/.bashrc" 2>/dev/null; then
     cat >> "$HOME/.bashrc" << 'BASHRC_EOF'
 
@@ -365,32 +271,30 @@ fi
 BASHRC_EOF
 fi
 
-# Activer dans la session courante
 export KUBECONFIG="$HOME/.kube/config"
 alias k=kubectl 2>/dev/null || true
 
 success "Alias k=kubectl configuré dans ~/.bashrc"
 success "KUBECONFIG configuré de façon permanente"
 
-# ─── 15. Suppression du taint control-plane ──────────────────────────────────
-section "15 · Suppression du taint control-plane"
+# ─── 10. Suppression du taint control-plane ─────────────────────────────────
+section "10 · Suppression du taint control-plane"
 
 kubectl taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
 kubectl taint nodes --all node-role.kubernetes.io/master- 2>/dev/null || true
 success "Nœud schedulable comme worker."
 
-# ─── 16. Flannel (CNI réseau) — interface auto-détectée ───────────────────────
-section "16 · Flannel (CNI réseau)"
+# ─── 11. Flannel (CNI réseau) ───────────────────────────────────────────────
+section "11 · Flannel (CNI réseau)"
 
 if kubectl get ds -n kube-flannel kube-flannel-ds &>/dev/null 2>&1; then
-    # Flannel déjà installé — vérifier si l'interface est correcte
     CURRENT_IFACE=$(kubectl get ds kube-flannel-ds -n kube-flannel \
         -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null \
         | grep -o 'iface=[^ "]*' | cut -d= -f2 || echo "")
     if [ "$CURRENT_IFACE" = "$PRIMARY_IFACE" ]; then
         success "Flannel déjà installé avec l'interface ${PRIMARY_IFACE}."
     else
-        warn "Flannel installé avec interface '${CURRENT_IFACE}' mais l'interface active est '${PRIMARY_IFACE}'. Réinstallation..."
+        warn "Flannel sur interface '${CURRENT_IFACE}' ≠ '${PRIMARY_IFACE}'. Réinstallation..."
         kubectl delete -f https://github.com/flannel-io/flannel/releases/download/v0.26.1/kube-flannel.yml \
             --ignore-not-found 2>/dev/null || true
         sleep 5
@@ -402,9 +306,6 @@ if ! kubectl get ds -n kube-flannel kube-flannel-ds &>/dev/null 2>&1; then
         "https://github.com/flannel-io/flannel/releases/download/v0.26.1/kube-flannel.yml" \
         -o /tmp/kube-flannel.yml
 
-    # ── Patch critique : utiliser l'interface réseau réelle de l'instance ──
-    # Sur Ubuntu 24.04 EC2 : ens5  /  Ubuntu 22.04 EC2 : eth0
-    # Remplacer --iface=eth0 si présent, ou ajouter l'argument
     if grep -q "iface=eth0" /tmp/kube-flannel.yml; then
         sed -i "s/--iface=eth0/--iface=${PRIMARY_IFACE}/g" /tmp/kube-flannel.yml
     elif grep -q "\-\-kube-subnet-mgr" /tmp/kube-flannel.yml; then
@@ -417,8 +318,8 @@ if ! kubectl get ds -n kube-flannel kube-flannel-ds &>/dev/null 2>&1; then
     success "Flannel installé."
 fi
 
-# ─── 17. Helm ────────────────────────────────────────────────────────────────
-section "17 · Helm v3"
+# ─── 12. Helm ───────────────────────────────────────────────────────────────
+section "12 · Helm v3"
 
 if command -v helm &>/dev/null; then
     success "Helm déjà installé : $(helm version --short)"
@@ -428,8 +329,8 @@ else
     success "Helm installé : $(helm version --short)"
 fi
 
-# ─── 18. Attente que le cluster soit Ready ────────────────────────────────────
-section "18 · Attente que le cluster soit opérationnel"
+# ─── 13. Attente que le cluster soit Ready ───────────────────────────────────
+section "13 · Attente que le cluster soit opérationnel"
 
 info "Attente nœud Ready (max 5 min)..."
 for i in $(seq 1 60); do
@@ -466,22 +367,15 @@ chk() {
     fi
 }
 
-chk "Docker engine"        "sudo docker version"
-chk "Trivy"                "trivy --version"
-chk "Hadolint (binaire)"   "hadolint --version"
-chk "Node.js"              "node --version"
-chk "Bandit"               "bandit --version"
-chk "Semgrep"              "semgrep --version"
-chk "Safety"               "safety --version"
-chk "SonarQube container"  "sudo docker ps --filter name=sonarqube --filter status=running | grep sonarqube"
-chk "Juice Shop container" "sudo docker ps --filter name=juiceshop  --filter status=running | grep juiceshop"
-chk "containerd"           "systemctl is-active containerd"
-chk "kubelet"              "systemctl is-active kubelet"
-chk "kubectl"              "kubectl get nodes"
-chk "kubeconfig"           "test -f $HOME/.kube/config"
-chk "alias k=kubectl"      "grep 'alias k=kubectl' $HOME/.bashrc"
-chk "Flannel Running"      "kubectl get pods -n kube-flannel -l app=flannel --field-selector=status.phase=Running | grep flannel"
-chk "Helm"                 "helm version"
+chk "Docker engine"      "sudo docker version"
+chk "Node.js"            "node --version"
+chk "containerd"         "systemctl is-active containerd"
+chk "kubelet"            "systemctl is-active kubelet"
+chk "kubectl"            "kubectl get nodes"
+chk "kubeconfig"         "test -f $HOME/.kube/config"
+chk "alias k=kubectl"    "grep 'alias k=kubectl' $HOME/.bashrc"
+chk "Flannel Running"    "kubectl get pods -n kube-flannel -l app=flannel --field-selector=status.phase=Running | grep flannel"
+chk "Helm"               "helm version"
 
 echo ""
 kubectl get nodes -o wide 2>/dev/null || true
@@ -495,30 +389,18 @@ IP=$(curl -sf -H "X-aws-ec2-metadata-token: ${EC2_TOKEN}" \
     || curl -sf -H "X-aws-ec2-metadata-token: ${EC2_TOKEN}" \
     http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null \
     || hostname -I | awk '{print $1}')
+
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║  ACCÈS AUX INTERFACES WEB                           ║${NC}"
-echo -e "${CYAN}║  Ubuntu 22.04 Jammy Jellyfish — runlevel 3          ║${NC}"
+echo -e "${CYAN}║  INFORMATIONS DU CLUSTER                            ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  IP publique    : ${GREEN}${IP}${NC}"
+echo -e "  IP publique      : ${GREEN}${IP}${NC}"
+echo -e "  API Kubernetes   : https://${IP}:6443"
 echo ""
-echo -e "  ${YELLOW}SonarQube${NC}      : http://${IP}:9000   (admin / admin)"
-echo -e "  ${YELLOW}Juice Shop${NC}     : http://${IP}:3001"
-echo -e "  ${YELLOW}API Kubernetes${NC} : https://${IP}:6443"
-echo ""
-echo -e "  ${BLUE}Option A — Ouvrir les ports dans le Security Group EC2 :${NC}"
-echo    "    Port 9000 → SonarQube"
-echo    "    Port 3001 → Juice Shop"
-echo    "    Port 30000-32767 → NodePort Kubernetes"
-echo    "    Source : Mon IP  (fermer après la session)"
-echo ""
-echo -e "  ${BLUE}Option B — SSH port forwarding (sans modifier le Security Group) :${NC}"
-echo    "    ssh -i <cle.pem> \"
-echo    "        -L 9000:localhost:9000 \"
-echo    "        -L 3001:localhost:3001 \"
-echo    "        ubuntu@${IP} -N"
-echo    "    Puis ouvrir http://localhost:9000 et http://localhost:3001"
+echo -e "  ${BLUE}NodePort Kubernetes (port forwarding SSH) :${NC}"
+echo    "    ssh -i <cle.pem> -L 30000:localhost:30000 ubuntu@${IP} -N"
+echo    "    Port 30000-32767 → Services NodePort"
 echo ""
 
 echo "╔══════════════════════════════════════════════════════╗"
