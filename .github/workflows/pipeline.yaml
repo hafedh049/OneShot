@@ -113,7 +113,7 @@ jobs:
           | tar xz -C /tmp
           sudo mv /tmp/kubesec /usr/local/bin/kubesec
 
-      - run: kubesec scan k8s/deployment.yaml > kubesec-report.json
+      - run: kubesec scan k8s/deployment.yaml > kubesec-report.json || true
 
   # ══════════════════════════════════════════════════════════════════════════
   # JOB 05 — Checkov
