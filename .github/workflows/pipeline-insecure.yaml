@@ -27,3 +27,14 @@ jobs:
           docker push $IMAGE_NAME:${{ github.run_number }}
           docker tag $IMAGE_NAME:${{ github.run_number }} $IMAGE_NAME:latest
           docker push $IMAGE_NAME:latest
+     
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ubuntu
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            kubectl set image deployment/cyberwatch \
+              cyberwatch=${{ secrets.DOCKERHUB_USERNAME }}/cyberwatch:${{ github.run_number }} \
+              -n production
